@@ -1,0 +1,54 @@
+# Keeps index.json (the list of available puzzle dates) up to date.
+# The Shabd Sangam app downloads this one small file instead of checking
+# every date one by one, so the puzzle list opens fast.
+#
+# Runs automatically whenever a puzzle file (YYYY-MM-DD.json) is added,
+# changed or deleted on main. Can also be run by hand from the Actions tab.
+name: Update puzzle index
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "20*.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-index
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build index.json
+        run: |
+          python3 - <<'EOF'
+          import json, os, re
+          dates = sorted(
+              f[:-5] for f in os.listdir(".")
+              if re.fullmatch(r"\d{4}-\d{2}-\d{2}\.json", f)
+          )
+          with open("index.json", "w") as fh:
+              json.dump({"dates": dates}, fh, indent=1)
+              fh.write("\n")
+          print(f"{len(dates)} puzzles listed")
+          EOF
+
+      - name: Commit if changed
+        run: |
+          git add index.json
+          if git diff --cached --quiet; then
+            echo "index.json already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update puzzle index"
+          git pull --rebase
+          git push
